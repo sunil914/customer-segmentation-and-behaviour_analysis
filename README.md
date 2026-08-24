@@ -32,18 +32,57 @@ This project transforms the UCI Online Retail transaction dataset into a custome
 - [`data/`](data/) — cleaned full dataset, preview sample, source and validation notes
 - [`sql/`](sql/) — executable SQLite schema, RFM analysis views and run guide
 - [`scripts/build_database.py`](scripts/build_database.py) — standard-library loader that rebuilds and validates `project.db`
-- `tableau/` and `screenshots/` — will be added when the dashboard is built
+- Tableau build guide below — workbook, Tableau Public link and screenshots are still pending
 
-## Tableau dashboard — in progress
+## Tableau dashboard build guide — in progress
 
-Planned views:
+The dashboard has not been built or published yet. The following specification turns the validated SQLite views into a reproducible Tableau Public workflow.
 
-- Revenue and customer count by RFM segment
-- Recency vs Monetary scatter, sized by Frequency
-- Segment profile heatmap
-- Country revenue comparison
-- Monthly revenue and top-product analysis
-- Interactive RFM and geography filters
+### 1. Prepare Tableau-ready files
+
+1. Run `python3 scripts/build_database.py` from the repository root.
+2. Open the generated `project.db` in DB Browser for SQLite.
+3. Export each of these views as a CSV with headers:
+   - `v_project_kpis`
+   - `v_customer_segments`
+   - `v_monthly_revenue`
+   - `v_country_performance`
+   - `v_product_performance`
+4. Connect the exported CSVs in Tableau. Keep `customer_id` as a string and revenue fields as decimal numbers.
+
+Before designing charts, reconcile **397,884 sales lines**, **4,338 customers**, **18,532 orders**, **£8,911,407.90 revenue**, **£480.87 average order value**, **947 Champions** and **661 At Risk customers**.
+
+### 2. Build the worksheets
+
+| Worksheet | Source | Tableau specification |
+|---|---|---|
+| KPI strip | `v_project_kpis` | Text marks for Revenue, Customers, Orders and Average Order Value |
+| Segment overview | `v_customer_segments` | Segment on Rows; `COUNTD(customer_id)` and `SUM(monetary)`; sort by revenue |
+| RFM scatter | `v_customer_segments` | Recency on Columns, Monetary on Rows, Customer ID on Detail, Frequency on Size and Segment on Colour |
+| Segment profile | `v_customer_segments` | Segment on Rows; average Recency, Frequency and Monetary as Measure Values |
+| Country performance | `v_country_performance` | Country on Rows and Revenue on Columns; show Customers and Orders in tooltips |
+| Monthly trend | `v_monthly_revenue` | Month on Columns and Revenue on Rows; use a continuous chronological month |
+| Product performance | `v_product_performance` | Description on Rows and Revenue on Columns; apply a Top 10 revenue filter |
+
+Use consistent currency formatting and show definitions in tooltips. For the scatter plot, lower recency represents a more recent purchase.
+
+### 3. Assemble and test the dashboard
+
+- Place the KPI strip first, followed by Segment overview and RFM scatter, then the supporting country, monthly and product views.
+- Add Segment and Country filters; apply each only to worksheets with compatible fields.
+- Add a Segment overview filter action so selecting a segment highlights the relevant customers.
+- Use a colour-blind-safe palette, retain text labels for important values and avoid encoding meaning with colour alone.
+- Provide descriptive worksheet titles, readable tooltips, logical tab order and sufficient contrast.
+- Recheck every KPI after filters are cleared and test the layout at desktop and phone sizes.
+
+### 4. Publish checklist
+
+- [ ] Build the Tableau workbook from the exported SQLite views
+- [ ] Reconcile unfiltered totals with `v_project_kpis`
+- [ ] Test filters, actions, tooltips and accessibility
+- [ ] Publish to Tableau Public
+- [ ] Add desktop and mobile screenshots
+- [ ] Add the workbook, screenshots and live dashboard link to this repository
 
 ## Key insights
 
