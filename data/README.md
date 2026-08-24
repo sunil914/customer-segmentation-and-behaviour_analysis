@@ -2,7 +2,14 @@
 
 ## File
 
-`online_retail_clean.csv.gz` contains 397,884 valid sales lines and nine columns. `online_retail_sample.csv` provides the first 500 rows for browser preview. Decompress the full file with `gzip -dk online_retail_clean.csv.gz`.
+The complete `online_retail_clean.csv.gz` dataset contains 397,884 valid sales lines and nine columns. It is stored as ten numbered parts, while `online_retail_sample.csv` provides the first 500 rows for browser preview.
+
+Reconstruct and decompress the full CSV:
+
+```bash
+cat online_retail_clean.csv.gz.part-* > online_retail_clean.csv.gz
+gzip -dk online_retail_clean.csv.gz
+```
 
 ## Source
 
