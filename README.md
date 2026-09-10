@@ -31,8 +31,34 @@ This project transforms the UCI Online Retail transaction dataset into a custome
 
 - [`data/`](data/) — cleaned full dataset, preview sample, source and validation notes
 - [`sql/`](sql/) — executable SQLite schema, RFM analysis views and run guide
+- [`scripts/prepare_data.py`](scripts/prepare_data.py) — Pandas preparation with KPI and checksum validation
 - [`scripts/build_database.py`](scripts/build_database.py) — standard-library loader that rebuilds and validates `project.db`
 - Tableau build guide below — workbook, Tableau Public link and screenshots are still pending
+
+## Reproduce the prepared data
+
+1. Download the UCI `Online Retail.xlsx` workbook and place it in `data/`.
+2. Install the two preparation dependencies:
+
+```bash
+python3 -m pip install pandas openpyxl
+```
+
+3. Rebuild the cleaned CSV from the repository root:
+
+```bash
+python3 scripts/prepare_data.py
+```
+
+To use a workbook elsewhere or choose another output path:
+
+```bash
+python3 scripts/prepare_data.py "path/to/Online Retail.xlsx" --output "path/to/online_retail_clean.csv"
+```
+
+The script applies the documented cleaning rules and validates the row, customer, order, revenue and average-order-value totals before writing. It also requires the exact uncompressed SHA-256 documented in [`data/README.md`](data/README.md); validation or checksum failure leaves no replacement output.
+
+The repository retains the validated dataset as multipart gzip files for GitHub storage. Run `python3 scripts/build_database.py` to reconstruct those committed parts and rebuild the SQLite database and analysis views.
 
 ## Tableau dashboard build guide — in progress
 
@@ -98,7 +124,7 @@ Use consistent currency formatting and show definitions in tooltips. For the sca
 - [x] Findings and retention recommendations documented
 - [x] Add cleaned data with source and validation notes
 - [x] Add reproducible SQLite database loader
-- [ ] Add reproducible preparation code
+- [x] Add reproducible preparation code
 - [x] Add complete SQL schema and analysis views
 - [ ] Build and publish Tableau dashboard
 - [ ] Add dashboard screenshots and Tableau Public link
