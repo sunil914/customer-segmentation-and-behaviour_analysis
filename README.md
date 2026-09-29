@@ -33,6 +33,7 @@ This project transforms the UCI Online Retail transaction dataset into a custome
 - [`sql/`](sql/) — executable SQLite schema, RFM analysis views and run guide
 - [`scripts/prepare_data.py`](scripts/prepare_data.py) — Pandas preparation with KPI and checksum validation
 - [`scripts/build_database.py`](scripts/build_database.py) — standard-library loader that rebuilds and validates `project.db`
+- [`scripts/export_tableau_data.py`](scripts/export_tableau_data.py) — dependency-free validation and deterministic Tableau CSV export
 - Tableau build guide below — workbook, Tableau Public link and screenshots are still pending
 
 ## Reproduce the prepared data
@@ -67,16 +68,23 @@ The dashboard has not been built or published yet. The following specification t
 ### 1. Prepare Tableau-ready files
 
 1. Run `python3 scripts/build_database.py` from the repository root.
-2. Open the generated `project.db` in DB Browser for SQLite.
-3. Export each of these views as a CSV with headers:
-   - `v_project_kpis`
-   - `v_customer_segments`
-   - `v_monthly_revenue`
-   - `v_country_performance`
-   - `v_product_performance`
-4. Connect the exported CSVs in Tableau. Keep `customer_id` as a string and revenue fields as decimal numbers.
+2. Validate `project.db` and export the required views in one step:
 
-Before designing charts, reconcile **397,884 sales lines**, **4,338 customers**, **18,532 orders**, **£8,911,407.90 revenue**, **£480.87 average order value**, **947 Champions** and **661 At Risk customers**.
+```bash
+python3 scripts/export_tableau_data.py
+```
+
+The exporter runs SQLite integrity checks, reconciles **397,884 sales lines**, **4,338 customers**, **18,532 orders**, **£8,911,407.90 revenue**, **£480.87 average order value**, **947 Champions** and **661 At Risk customers**, then atomically writes these deterministic files:
+
+- `tableau/exports/project_kpis.csv`
+- `tableau/exports/customer_segments.csv`
+- `tableau/exports/monthly_revenue.csv`
+- `tableau/exports/country_performance.csv`
+- `tableau/exports/product_performance.csv`
+
+3. Connect the exported CSVs in Tableau. Keep `customer_id` as a string and revenue fields as decimal numbers.
+
+Use `--database` or `--output-dir` to select another validated database or export location. If any integrity, KPI or segment check fails, the script exits before replacing the export set.
 
 ### 2. Build the worksheets
 
