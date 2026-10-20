@@ -111,6 +111,11 @@ def main() -> None:
         default=str(ROOT / "tableau" / "exports"),
         help="CSV destination (default: tableau/exports)",
     )
+    parser.add_argument(
+        "--check-only",
+        action="store_true",
+        help="validate the database, KPIs and segment counts without writing CSVs",
+    )
     args = parser.parse_args()
 
     database = Path(args.database).resolve()
@@ -120,11 +125,18 @@ def main() -> None:
             f"{database} does not exist. Run scripts/build_database.py first."
         )
 
-    output_dir.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(database) as connection:
         connection.row_factory = sqlite3.Row
         validate_database(connection)
+        if args.check_only:
+            print(
+                "Validation passed: SQLite integrity, five required views, "
+                "project KPIs and segment counts match the documented values."
+            )
+            print("No Tableau CSV files were written.")
+            return
 
+        output_dir.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(
             prefix="tableau-export-", dir=output_dir.parent
         ) as temporary:
