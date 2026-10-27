@@ -28,6 +28,28 @@ EXPECTED_KPIS = {
     "average_order_value": 480.87,
 }
 EXPECTED_SEGMENTS = {"Champions": 947, "At Risk": 661}
+EXPECTED_EXPORT_COLUMNS = {
+    "v_project_kpis": (
+        "line_items",
+        "customers",
+        "orders",
+        "revenue",
+        "average_order_value",
+    ),
+    "v_customer_segments": (
+        "customer_id",
+        "recency_days",
+        "frequency",
+        "monetary",
+        "r_score",
+        "f_score",
+        "m_score",
+        "segment",
+    ),
+    "v_monthly_revenue": ("month", "orders", "customers", "revenue"),
+    "v_country_performance": ("country", "customers", "orders", "revenue"),
+    "v_product_performance": ("stock_code", "description", "units", "revenue"),
+}
 
 
 def validate_database(connection: sqlite3.Connection) -> None:
@@ -44,6 +66,15 @@ def validate_database(connection: sqlite3.Connection) -> None:
     missing = [view for view, _ in EXPORTS if view not in available]
     if missing:
         raise ValueError(f"Missing required views: {', '.join(missing)}")
+
+    for view, expected_columns in EXPECTED_EXPORT_COLUMNS.items():
+        cursor = connection.execute(f'SELECT * FROM "{view}" LIMIT 0')
+        actual_columns = tuple(column[0] for column in cursor.description)
+        if actual_columns != expected_columns:
+            raise ValueError(
+                f"{view} column contract mismatch: expected "
+                f"{expected_columns}, got {actual_columns}"
+            )
 
     row = connection.execute("SELECT * FROM v_project_kpis").fetchone()
     if row is None:
@@ -131,7 +162,8 @@ def main() -> None:
         if args.check_only:
             print(
                 "Validation passed: SQLite integrity, five required views, "
-                "project KPIs and segment counts match the documented values."
+                "export column contracts, project KPIs and segment counts match "
+                "the documented values."
             )
             print("No Tableau CSV files were written.")
             return
