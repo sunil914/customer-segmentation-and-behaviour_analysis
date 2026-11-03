@@ -28,6 +28,17 @@ EXPECTED_KPIS = {
     "average_order_value": 480.87,
 }
 EXPECTED_SEGMENTS = {"Champions": 947, "At Risk": 661}
+EXPECTED_SEGMENT_LABELS = frozenset(
+    {
+        "Champions",
+        "Loyal",
+        "Potential Loyalists",
+        "New",
+        "At Risk",
+        "Needs Attention",
+        "Hibernating",
+    }
+)
 EXPECTED_EXPORT_COLUMNS = {
     "v_project_kpis": (
         "line_items",
@@ -94,6 +105,41 @@ def validate_database(connection: sqlite3.Connection) -> None:
                 f"{key} mismatch: expected {EXPECTED_KPIS[key]}, got {actual[key]}"
             )
 
+    customer_stats = connection.execute(
+        """
+        SELECT
+            COUNT(*) AS rows,
+            COUNT(DISTINCT customer_id) AS unique_customers,
+            SUM(
+                CASE
+                    WHEN customer_id IS NULL
+                        OR TRIM(CAST(customer_id AS TEXT)) = ''
+                    THEN 1 ELSE 0
+                END
+            ) AS blank_customer_ids
+        FROM v_customer_segments
+        """
+    ).fetchone()
+    expected_customers = EXPECTED_KPIS["customers"]
+    customer_checks = {
+        "customer segment rows": (customer_stats["rows"], expected_customers),
+        "unique customer IDs": (
+            customer_stats["unique_customers"],
+            expected_customers,
+        ),
+        "blank customer IDs": (customer_stats["blank_customer_ids"], 0),
+    }
+    customer_failures = [
+        f"{name}: expected {expected}, got {actual}"
+        for name, (actual, expected) in customer_checks.items()
+        if actual != expected
+    ]
+    if customer_failures:
+        raise ValueError(
+            "Customer-level export grain mismatch:\n- "
+            + "\n- ".join(customer_failures)
+        )
+
     segment_counts = dict(
         connection.execute(
             """
@@ -103,6 +149,15 @@ def validate_database(connection: sqlite3.Connection) -> None:
             """
         )
     )
+    actual_labels = set(segment_counts)
+    if actual_labels != EXPECTED_SEGMENT_LABELS:
+        missing = sorted(str(value) for value in EXPECTED_SEGMENT_LABELS - actual_labels)
+        unexpected = sorted(str(value) for value in actual_labels - EXPECTED_SEGMENT_LABELS)
+        raise ValueError(
+            "Segment label contract mismatch: "
+            f"missing {missing or 'none'}, unexpected {unexpected or 'none'}"
+        )
+
     for segment, expected in EXPECTED_SEGMENTS.items():
         actual_count = segment_counts.get(segment)
         if actual_count != expected:
