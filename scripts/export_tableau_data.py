@@ -140,6 +140,66 @@ def validate_database(connection: sqlite3.Connection) -> None:
             + "\n- ".join(customer_failures)
         )
 
+    rfm_stats = connection.execute(
+        """
+        SELECT
+            SUM(CASE WHEN recency_days < 0 THEN 1 ELSE 0 END)
+                AS negative_recency,
+            SUM(CASE WHEN frequency <= 0 THEN 1 ELSE 0 END)
+                AS nonpositive_frequency,
+            SUM(CASE WHEN monetary <= 0 THEN 1 ELSE 0 END)
+                AS nonpositive_monetary,
+            SUM(
+                CASE
+                    WHEN r_score NOT BETWEEN 1 AND 5
+                        OR f_score NOT BETWEEN 1 AND 5
+                        OR m_score NOT BETWEEN 1 AND 5
+                    THEN 1 ELSE 0
+                END
+            ) AS invalid_scores,
+            SUM(
+                CASE
+                    WHEN segment != CASE
+                        WHEN r_score >= 4 AND f_score >= 4 AND m_score >= 4
+                            THEN 'Champions'
+                        WHEN r_score >= 3 AND f_score >= 3 AND m_score >= 3
+                            THEN 'Loyal'
+                        WHEN r_score >= 4 AND f_score BETWEEN 2 AND 3
+                            THEN 'Potential Loyalists'
+                        WHEN r_score = 5 AND f_score = 1
+                            THEN 'New'
+                        WHEN r_score <= 2 AND f_score >= 3
+                            THEN 'At Risk'
+                        WHEN r_score = 3 AND f_score <= 2
+                            THEN 'Needs Attention'
+                        ELSE 'Hibernating'
+                    END
+                    THEN 1 ELSE 0
+                END
+            ) AS segment_assignment_mismatches
+        FROM v_customer_segments
+        """
+    ).fetchone()
+    rfm_checks = {
+        "negative recency values": rfm_stats["negative_recency"],
+        "nonpositive frequency values": rfm_stats["nonpositive_frequency"],
+        "nonpositive monetary values": rfm_stats["nonpositive_monetary"],
+        "RFM scores outside 1-5": rfm_stats["invalid_scores"],
+        "segment assignment mismatches": rfm_stats[
+            "segment_assignment_mismatches"
+        ],
+    }
+    rfm_failures = [
+        f"{name}: expected 0, got {actual}"
+        for name, actual in rfm_checks.items()
+        if actual != 0
+    ]
+    if rfm_failures:
+        raise ValueError(
+            "RFM domain or segment assignment validation failed:\n- "
+            + "\n- ".join(rfm_failures)
+        )
+
     segment_counts = dict(
         connection.execute(
             """
@@ -217,8 +277,8 @@ def main() -> None:
         if args.check_only:
             print(
                 "Validation passed: SQLite integrity, five required views, "
-                "export column contracts, project KPIs and segment counts match "
-                "the documented values."
+                "export column contracts, project KPIs, RFM domains, segment "
+                "assignments and segment counts match the documented values."
             )
             print("No Tableau CSV files were written.")
             return
