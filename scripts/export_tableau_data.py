@@ -105,6 +105,42 @@ def validate_database(connection: sqlite3.Connection) -> None:
                 f"{key} mismatch: expected {EXPECTED_KPIS[key]}, got {actual[key]}"
             )
 
+    order_reconciliations = {
+        "monthly orders": connection.execute(
+            "SELECT COALESCE(SUM(orders), 0) FROM v_monthly_revenue"
+        ).fetchone()[0],
+        "country orders": connection.execute(
+            "SELECT COALESCE(SUM(orders), 0) FROM v_country_performance"
+        ).fetchone()[0],
+    }
+    for name, value in order_reconciliations.items():
+        if value != actual["orders"]:
+            raise ValueError(
+                f"{name} reconciliation failed: expected {actual['orders']}, "
+                f"got {value}"
+            )
+
+    revenue_reconciliations = {
+        "monthly revenue": connection.execute(
+            "SELECT ROUND(COALESCE(SUM(revenue), 0), 2) "
+            "FROM v_monthly_revenue"
+        ).fetchone()[0],
+        "country revenue": connection.execute(
+            "SELECT ROUND(COALESCE(SUM(revenue), 0), 2) "
+            "FROM v_country_performance"
+        ).fetchone()[0],
+        "product revenue": connection.execute(
+            "SELECT ROUND(COALESCE(SUM(revenue), 0), 2) "
+            "FROM v_product_performance"
+        ).fetchone()[0],
+    }
+    for name, value in revenue_reconciliations.items():
+        if not math.isclose(value, actual["revenue"], rel_tol=0, abs_tol=0.05):
+            raise ValueError(
+                f"{name} reconciliation failed: expected {actual['revenue']}, "
+                f"got {value}"
+            )
+
     customer_stats = connection.execute(
         """
         SELECT
@@ -277,8 +313,9 @@ def main() -> None:
         if args.check_only:
             print(
                 "Validation passed: SQLite integrity, five required views, "
-                "export column contracts, project KPIs, RFM domains, segment "
-                "assignments and segment counts match the documented values."
+                "export column contracts, project KPIs, cross-view order and "
+                "revenue totals, RFM domains, segment assignments and segment "
+                "counts match the documented values."
             )
             print("No Tableau CSV files were written.")
             return
