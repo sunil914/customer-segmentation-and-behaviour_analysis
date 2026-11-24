@@ -62,6 +62,15 @@ EXPECTED_EXPORT_COLUMNS = {
     "v_product_performance": ("stock_code", "description", "units", "revenue"),
 }
 
+AGGREGATE_EXPORT_CONTRACTS = {
+    "v_monthly_revenue": (("month",), ("orders", "customers", "revenue")),
+    "v_country_performance": (("country",), ("customers", "orders", "revenue")),
+    "v_product_performance": (
+        ("stock_code", "description"),
+        ("units", "revenue"),
+    ),
+}
+
 
 def validate_database(connection: sqlite3.Connection) -> None:
     integrity = connection.execute("PRAGMA quick_check").fetchone()[0]
@@ -85,6 +94,52 @@ def validate_database(connection: sqlite3.Connection) -> None:
             raise ValueError(
                 f"{view} column contract mismatch: expected "
                 f"{expected_columns}, got {actual_columns}"
+            )
+
+    for view, (grain_fields, measure_fields) in (
+        AGGREGATE_EXPORT_CONTRACTS.items()
+    ):
+        quoted_grain = ", ".join(f'"{field}"' for field in grain_fields)
+        blank_grain = " OR ".join(
+            f'"{field}" IS NULL OR TRIM(CAST("{field}" AS TEXT)) = \'\''
+            for field in grain_fields
+        )
+        invalid_measure = " OR ".join(
+            f'"{field}" IS NULL OR "{field}" <= 0'
+            for field in measure_fields
+        )
+        row_count = connection.execute(
+            f'SELECT COUNT(*) FROM "{view}"'
+        ).fetchone()[0]
+        distinct_grains = connection.execute(
+            f'SELECT COUNT(*) FROM ('
+            f'SELECT 1 FROM "{view}" GROUP BY {quoted_grain})'
+        ).fetchone()[0]
+        blank_grains = connection.execute(
+            f'SELECT COALESCE(SUM(CASE WHEN {blank_grain} '
+            f'THEN 1 ELSE 0 END), 0) FROM "{view}"'
+        ).fetchone()[0]
+        invalid_measures = connection.execute(
+            f'SELECT COALESCE(SUM(CASE WHEN {invalid_measure} '
+            f'THEN 1 ELSE 0 END), 0) FROM "{view}"'
+        ).fetchone()[0]
+        failures = []
+        if row_count == 0:
+            failures.append("export contains no rows")
+        if distinct_grains != row_count:
+            failures.append(
+                f"duplicate grain rows: {row_count - distinct_grains}"
+            )
+        if blank_grains:
+            failures.append(f"blank grain rows: {blank_grains}")
+        if invalid_measures:
+            failures.append(
+                f"null or nonpositive measure rows: {invalid_measures}"
+            )
+        if failures:
+            raise ValueError(
+                f"{view} aggregate contract failed: "
+                + "; ".join(failures)
             )
 
     row = connection.execute("SELECT * FROM v_project_kpis").fetchone()
@@ -313,7 +368,8 @@ def main() -> None:
         if args.check_only:
             print(
                 "Validation passed: SQLite integrity, five required views, "
-                "export column contracts, project KPIs, cross-view order and "
+                "export column and aggregate-grain contracts, project KPIs, "
+                "cross-view order and "
                 "revenue totals, RFM domains, segment assignments and segment "
                 "counts match the documented values."
             )
